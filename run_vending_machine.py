@@ -1,10 +1,10 @@
 import datetime
+import os
 import serial
 import serial.tools.list_ports
 import threading
 import time
 from queue import Queue
-
 
 
 def _find_port_with_name_in_descriptor(name):
@@ -53,14 +53,37 @@ def read_from_keypad(serial_port):
             orders_received.put(order)
 
 
-def read_from_buttons(serial_port):
+def read_from_buttons(serial_port, button_mapping):
     with serial.Serial(serial_port, baudrate=9600, timeout=1) as button_port:
         while True:
             order = read_serial_until(button_port, b'\n')
-            orders_received.put(order)
+            orders_received.put(button_mapping[int(order)])
 
+
+button_config_filepath = "button_config.txt"
 
 if __name__ == "__main__":
+    if os.path.isfile(button_config_filepath):
+        print("Existing button configuration found:")
+        with open(button_config_filepath) as file:
+            print(file.read())
+        will_modify = input("Would you like to edit it? (y/n) ")
+        if will_modify == "y":
+            print("Exiting. Please edit " + button_config_filepath)
+            exit()
+    else:
+        # Todo: These are probably in order from bottom to top lol. probably flip these here and in the arduino code
+        #  to be top-to-bottom and also 1-indexed
+        blank_config = '0. \n1. \n2. \n3. \n4. \n5. \n6. \n'
+        with open(button_config_filepath, 'w') as file:
+            file.write(blank_config)
+        print("Button configuration not yet created. Blank template created. Please fill it out.")
+        exit()
+
+    with open(button_config_filepath) as file:
+        numbers_and_labels = [line.split(". ") for line in file.readlines()]
+        button_mapping = {int(pair[0]): pair[1].strip() for pair in numbers_and_labels}
+    
     arduino_port = find_arduino_port()
     keypad_port = find_prolific_port()
     print(f"Reading from keypad on {keypad_port} and Arduino (buttons) on {arduino_port}.")
@@ -70,10 +93,13 @@ if __name__ == "__main__":
     keypad_thread = threading.Thread(target=read_from_keypad, args=(keypad_port,), daemon=True)
     keypad_thread.start()
     
-    button_thread = threading.Thread(target=read_from_buttons, args=(arduino_port,), daemon=True)
+    button_thread = threading.Thread(target=read_from_buttons, args=(arduino_port,button_mapping,), daemon=True)
     button_thread.start()
     
     while True:
         if not orders_received.empty():
-            print(orders_received.get(), flush=True)
+            new_order = orders_received.get()
+            time_string = datetime.datetime.now().strftime("%H:%M:%S")
+            line_to_print = time_string + " " + new_order
+            print(line_to_print, flush=True)
             time.sleep(0.05)
