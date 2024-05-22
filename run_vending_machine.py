@@ -70,6 +70,7 @@ if __name__ == "__main__":
         will_modify = input("Would you like to edit it? (y/n) ")
         if will_modify == "y":
             print("Exiting. Please edit " + button_config_filepath)
+            time.sleep(1)
             exit()
     else:
         # Todo: These are probably in order from bottom to top lol. probably flip these here and in the arduino code
@@ -78,6 +79,7 @@ if __name__ == "__main__":
         with open(button_config_filepath, 'w') as file:
             file.write(blank_config)
         print("Button configuration not yet created. Blank template created. Please fill it out.")
+        time.sleep(1)
         exit()
 
     with open(button_config_filepath) as file:
@@ -102,4 +104,7 @@ if __name__ == "__main__":
             time_string = datetime.datetime.now().strftime("%H:%M:%S")
             line_to_print = time_string + " " + new_order
             print(line_to_print, flush=True)
+            log_file = open("log.txt", "a")
+            log_file.writelines([line_to_print + "\n"])
+            log_file.close()
             time.sleep(0.05)
