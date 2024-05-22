@@ -1,7 +1,9 @@
 import datetime
 import serial
 import serial.tools.list_ports
+import threading
 import time
+from queue import Queue
 
 
 
@@ -36,34 +38,42 @@ def read_serial_until(port, terminator):
                 return line
         else:
             # Sleep briefly to avoid busy waiting
-            time.sleep(0.1)
+            time.sleep(0.05)
+
+
+# Use a Queue because it is thread-safe
+orders_received = Queue()
 
 
 def read_from_keypad(serial_port):
-    try:
-        # Open the serial port
-        with serial.Serial(serial_port, baudrate=9600, timeout=1) as port:
-            print(f"Reading from {serial_port}... Press Ctrl+C to stop.", flush=True)
-            while True:
-                # The keypad terminates its lines with '\r' (not '\n' or '\r\n')
-                line = read_serial_until(port, b'\r')
-                time_string = datetime.datetime.now().strftime("%H:%M:%S")
-                line_to_print = time_string + " " + line
-                print(line_to_print, flush=True)
-                log_file = open("log.txt", "a")
-                log_file.writelines([line_to_print + "\n"])
-                log_file.close()
-    except serial.SerialException as e:
-        print()
-        print(f"Error: {e}")
-    except KeyboardInterrupt:
-        print()
-        print("Keypad reading stopped.")
+    with serial.Serial(serial_port, baudrate=9600, timeout=1) as keypad_port:
+        while True:
+            # The keypad terminates its lines with '\r' (not '\n' or '\r\n')
+            order = read_serial_until(keypad_port, b'\r')
+            orders_received.put(order)
+
+
+def read_from_buttons(serial_port):
+    with serial.Serial(serial_port, baudrate=9600, timeout=1) as button_port:
+        while True:
+            order = read_serial_until(button_port, b'\n')
+            orders_received.put(order)
+
 
 if __name__ == "__main__":
     arduino_port = find_arduino_port()
-    print("Adruino port: " + arduino_port)
     keypad_port = find_prolific_port()
-    print("Keypad port: " + keypad_port)
+    print(f"Reading from keypad on {keypad_port} and Arduino (buttons) on {arduino_port}.")
+    print("Press Ctrl+C to stop.")
     print('', flush=True)
-    read_from_keypad(keypad_port)
+    
+    keypad_thread = threading.Thread(target=read_from_keypad, args=(keypad_port,), daemon=True)
+    keypad_thread.start()
+    
+    button_thread = threading.Thread(target=read_from_buttons, args=(arduino_port,), daemon=True)
+    button_thread.start()
+    
+    while True:
+        if not orders_received.empty():
+            print(orders_received.get(), flush=True)
+            time.sleep(0.05)
