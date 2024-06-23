@@ -6,6 +6,7 @@ import time
 from queue import Queue
 
 from order import Order
+from vending_machine_gui import VendingMachineGUI
 
 
 def _find_port_with_name_in_descriptor(name):
@@ -64,6 +65,20 @@ def read_from_buttons(serial_port, button_mapping):
             orders_received.put(order)
 
 
+def update_gui(gui):
+    while True:
+        if not orders_received.empty():
+            new_order = orders_received.get()
+            print(new_order, flush=True)
+            current_order_text = gui.get_current_order_text()
+            gui.append_past_order(current_order_text)
+            gui.update_current_order(str(new_order))
+            log_file = open("log.txt", "a")
+            log_file.writelines([str(new_order) + "\n"])
+            log_file.close()
+            time.sleep(0.02)
+
+
 button_config_filepath = "button_config.txt"
 
 if __name__ == "__main__":
@@ -87,12 +102,12 @@ if __name__ == "__main__":
         # Block for a second so that the user can read the message if it's being run as a batch script
         time.sleep(1)
         exit()
-    
+
     # Load the button label config
     with open(button_config_filepath) as file:
         numbers_and_labels = [line.split(". ") for line in file.readlines()]
         button_mapping = {int(pair[0]): pair[1].strip() for pair in numbers_and_labels}
-    
+
     # Connect to the Arduino (for buttons) and keypad
     arduino_port = find_arduino_port()
     keypad_port = find_prolific_port()
@@ -100,18 +115,16 @@ if __name__ == "__main__":
     print(f"Reading from keypad on {keypad_port} and Arduino (buttons) on {arduino_port}.")
     print("Press Ctrl+C to stop.")
     print('', flush=True)
-    
+
+    gui = VendingMachineGUI()
+
     keypad_thread = threading.Thread(target=read_from_keypad, args=(keypad_port,), daemon=True)
     keypad_thread.start()
-    
-    button_thread = threading.Thread(target=read_from_buttons, args=(arduino_port,button_mapping,), daemon=True)
+
+    button_thread = threading.Thread(target=read_from_buttons, args=(arduino_port, button_mapping,), daemon=True)
     button_thread.start()
-    
-    while True:
-        if not orders_received.empty():
-            new_order = orders_received.get()
-            print(new_order, flush=True)
-            log_file = open("log.txt", "a")
-            log_file.writelines([str(new_order) + "\n"])
-            log_file.close()
-            time.sleep(0.02)
+
+    update_gui_thread = threading.Thread(target=update_gui, args=(gui,), daemon=True)
+    update_gui_thread.start()
+
+    gui.run()
