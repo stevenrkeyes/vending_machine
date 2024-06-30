@@ -34,13 +34,14 @@ def update_gui(gui):
     while True:
         if not orders_received.empty():
             new_order = orders_received.get()
+            gui.add_new_order(str(new_order))
+
+            # Log the order to a text file for nostalgia
             print(new_order, flush=True)
-            current_order_text = gui.get_current_order_text()
-            gui.append_past_order(current_order_text)
-            gui.update_current_order(str(new_order))
             log_file = open("log.txt", "a")
             log_file.writelines([str(new_order) + "\n"])
             log_file.close()
+
             time.sleep(0.02)
 
 
