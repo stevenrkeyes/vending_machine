@@ -1,6 +1,7 @@
 import serial
 import serial.tools.list_ports
 import time
+import warnings
 
 
 def _find_port_with_name_in_descriptor(name):
@@ -14,7 +15,14 @@ def _find_port_with_name_in_descriptor(name):
 
 
 def find_arduino_port():
-    return _find_port_with_name_in_descriptor("Arduino Uno")
+    try:
+        port = _find_port_with_name_in_descriptor("Arduino Uno")
+    except RuntimeError:
+        # Todo: maybe identify this port based on sending it a ping or something rather than relying on drivers
+        #  to give it an expected name
+        warnings.warn("Couldn't find Arduino port; are you missing Arduino drivers? Trying again with generic port name")
+        port = _find_port_with_name_in_descriptor("USB Serial Device")
+    return port
 
 
 def find_prolific_port():
